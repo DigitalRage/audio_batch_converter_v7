@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><div id="engineStatus" class="status">Idle</div><script>
+const el=document.getElementById("engineStatus");
+if(!el) throw new Error("status element missing");
+el.textContent="test";
+el.className="status good";
+document.body.dataset.ok="true";
+</script>
