@@ -1,0 +1,68 @@
+name: Build xHE-AAC WebAssembly and deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24
+    - uses: emscripten-core/setup-emsdk@v15
+      with:
+        version: latest
+        actions-cache-folder: emsdk-cache
+    - name: Fetch exhale
+      run: git clone --depth 1 https://github.com/dtseto/exhale.git third_party_exhale
+    - name: Compile exhale to WebAssembly
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p vendor/exhale
+        mapfile -t SOURCES < <(find third_party_exhale/src/lib third_party_exhale/src/app -maxdepth 1 -type f -name '*.cpp' ! -name '*Pch.cpp' | sort)
+        em++ -O3 -flto -std=c++11 "${SOURCES[@]}" \
+          -Ithird_party_exhale/include -Ithird_party_exhale/src/lib -Ithird_party_exhale/src/app \
+          -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createExhale \
+          -sEXPORTED_FUNCTIONS='["_main"]' -sEXPORTED_RUNTIME_METHODS='["FS","callMain"]' \
+          -sFORCE_FILESYSTEM=1 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=134217728 \
+          -sSTACK_SIZE=8388608 -sNO_EXIT_RUNTIME=1 -sENVIRONMENT='web,worker,node' -sASSERTIONS=0 \
+          -o vendor/exhale/exhale.mjs
+        ls -lh vendor/exhale
+    - name: Smoke test WebAssembly
+      run: |
+        node --input-type=module <<'NODE'
+        import Factory from './vendor/exhale/exhale.mjs';
+        function wav(){const sr=44100,ch=2,frames=44100/4,pcm=Buffer.alloc(frames*ch*2);for(let i=0;i<frames;i++){const v=Math.round(Math.sin(i*2*Math.PI*440/sr)*12000);pcm.writeInt16LE(v,(i*ch)*2);pcm.writeInt16LE(v,(i*ch+1)*2)}const b=Buffer.alloc(44+pcm.length);b.write('RIFF',0);b.writeUInt32LE(36+pcm.length,4);b.write('WAVE',8);b.write('fmt ',12);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(ch,22);b.writeUInt32LE(sr,24);b.writeUInt32LE(sr*ch*2,28);b.writeUInt16LE(ch*2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(pcm.length,40);pcm.copy(b,44);return b}
+        const m=await Factory({locateFile:p=>new URL('./vendor/exhale/'+p,import.meta.url).pathname});m.FS.writeFile('/t.wav',new Uint8Array(wav()));try{m.callMain(['5','/t.wav','/t.m4a'])}catch(e){if(e?.status)throw e}const o=m.FS.readFile('/t.m4a');if(o.length<1000)throw new Error('Unexpected xHE-AAC output size');console.log('xHE-AAC smoke test passed:',o.length)
+        NODE
+    - uses: actions/configure-pages@v5
+    - name: Stage site
+      run: |
+        rm -rf _site && mkdir _site
+        rsync -a --exclude='.git' --exclude='.github' --exclude='third_party_exhale' --exclude='_site' ./ _site/
+        touch _site/.nojekyll
+    - uses: actions/upload-pages-artifact@v4
+      with:
+        path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+    - id: deployment
+      uses: actions/deploy-pages@v4

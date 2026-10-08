@@ -1,0 +1,3 @@
+app.js syntax: passed
+xhe-worker.js syntax: passed
+Workflow and Emscripten build included; actual exhale WASM compilation requires GitHub Actions or an Emscripten environment.

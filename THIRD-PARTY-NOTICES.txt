@@ -1,0 +1,12 @@
+Third-party notices
+
+exhale: https://github.com/dtseto/exhale
+The repository describes exhale as an open-source ISO/IEC 23003-3 USAC/xHE-AAC encoder and states that its license is based on the 3-clause BSD license with additional terms. The repository also notes that third-party patent rights may apply to MPEG output.
+
+FFmpeg.wasm: https://github.com/ffmpegwasm/ffmpeg.wasm
+Wrapper/core licensing follows the respective package/repository notices.
+
+JSZip: https://stuk.github.io/jszip/
+MIT licensed.
+
+This application is independent and is not affiliated with exhale, Ecodis, FFmpeg, Fraunhofer, or GitHub.
